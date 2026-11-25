@@ -1,10 +1,169 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from './lib/supabase';
 import {
   Search, Bell, MessageSquare, Users, ChevronRight, Menu, LogIn, LogOut,
   Plus, MessagesSquare, ShieldCheck, Clock3, X, ArrowLeft, Send, UserRound,
   LockKeyhole, Mail, UserPlus, RefreshCw, Trash2, Pin, Lock, Settings, FolderPlus
 } from 'lucide-react';
+
+
+const BBCodeToolbar = ({ onInsert }) => {
+  const tools = [
+    ['B', 'b', 'Жирный'], ['I', 'i', 'Курсив'], ['U', 'u', 'Подчёркнутый'],
+    ['S', 's', 'Зачёркнутый'], ['Цитата', 'quote', 'Цитата'],
+    ['Код', 'code', 'Код'], ['Список', 'list', 'Список'],
+    ['Ссылка', 'url', 'Ссылка'], ['Изображение', 'img', 'Изображение'],
+    ['Цвет', 'color', 'Цвет текста']
+  ];
+  return <div className="bbcode-toolbar" aria-label="BB-коды">
+    {tools.map(([label, tag, title]) => <button type="button" key={tag} title={title} onClick={() => onInsert(tag)}>{label}</button>)}
+    <span>BB-коды</span>
+  </div>;
+};
+
+function parseBBCode(source) {
+  const root = { tag: 'root', children: [] };
+  const stack = [root];
+  const tokenPattern = /\[(\*|\/?(?:b|i|u|s|strike|url|img|email|quote|code|spoiler|color|size|center|left|right|list)(?:=[^\]]*)?)\]/gi;
+  let lastIndex = 0;
+  let match;
+  while ((match = tokenPattern.exec(source || '')) !== null) {
+    if (match.index > lastIndex) stack[stack.length - 1].children.push({ text: source.slice(lastIndex, match.index) });
+    const raw = match[1];
+    if (raw === '*') {
+      const listNode = [...stack].reverse().find((node) => node.tag === 'list');
+      if (listNode) listNode.children.push({ tag: 'li', attr: '', children: [] });
+      lastIndex = tokenPattern.lastIndex;
+      continue;
+    }
+    if (raw.startsWith('/')) {
+      const closingTag = raw.slice(1).toLowerCase();
+      const closingIndex = stack.map((node) => node.tag).lastIndexOf(closingTag);
+      if (closingIndex > 0) stack.length = closingIndex;
+    } else {
+      const separator = raw.indexOf('=');
+      const tag = (separator === -1 ? raw : raw.slice(0, separator)).toLowerCase();
+      const attr = separator === -1 ? '' : raw.slice(separator + 1).trim();
+      const node = { tag, attr, children: [] };
+      stack[stack.length - 1].children.push(node);
+      stack.push(node);
+    }
+    lastIndex = tokenPattern.lastIndex;
+  }
+  if (lastIndex < (source || '').length) stack[stack.length - 1].children.push({ text: source.slice(lastIndex) });
+  return root.children;
+}
+
+function safeWebUrl(value) {
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function renderBBNodes(nodes, keyPrefix = 'bb') {
+  return nodes.map((node, index) => {
+    const key = keyPrefix + '-' + index;
+    if (node.text !== undefined) {
+      return node.text.split('\n').map((line, lineIndex) => <span key={key + '-' + lineIndex}>{line}{lineIndex < node.text.split('\n').length - 1 && <br />}</span>);
+    }
+    const children = renderBBNodes(node.children || [], key);
+    const plainText = (node.children || []).map((child) => child.text ?? '').join('').trim();
+    switch (node.tag) {
+      case 'b': return <strong key={key}>{children}</strong>;
+      case 'i': return <em key={key}>{children}</em>;
+      case 'u': return <u key={key}>{children}</u>;
+      case 's':
+      case 'strike': return <s key={key}>{children}</s>;
+      case 'url': {
+        const href = safeWebUrl(node.attr || plainText);
+        return href ? <a key={key} href={href} target="_blank" rel="noopener noreferrer">{children.length ? children : href}</a> : <span key={key}>{children}</span>;
+      }
+      case 'email': {
+        const email = node.attr || plainText;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? <a key={key} href={'mailto:' + email}>{children.length ? children : email}</a> : <span key={key}>{children}</span>;
+      }
+      case 'img': {
+        const src = safeWebUrl(plainText);
+        return src && src.startsWith('https://') ? <img key={key} className="bbcode-image" src={src} alt="Изображение из сообщения" loading="lazy" /> : <span key={key}>{children}</span>;
+      }
+      case 'quote': return <blockquote key={key} className="bbcode-quote">{node.attr && <cite>{node.attr}</cite>}{children}</blockquote>;
+      case 'code': return <pre key={key} className="bbcode-code"><code>{(node.children || []).map((child) => child.text ?? '').join('')}</code></pre>;
+      case 'spoiler': return <details key={key} className="bbcode-spoiler"><summary>Показать скрытый текст</summary><div>{children}</div></details>;
+      case 'color': {
+        const color = /^(#[0-9a-f]{3,8}|[a-z]{3,20})$/i.test(node.attr) ? node.attr : null;
+        return color ? <span key={key} style={{ color }}>{children}</span> : <span key={key}>{children}</span>;
+      }
+      case 'size': {
+        const size = /^(8|9|10|11|12|14|16|18|20|22|24|28|32|36)(px)?$/i.test(node.attr) ? (node.attr.endsWith('px') ? node.attr : node.attr + 'px') : null;
+        return size ? <span key={key} style={{ fontSize: size }}>{children}</span> : <span key={key}>{children}</span>;
+      }
+      case 'center': return <div key={key} style={{ textAlign: 'center' }}>{children}</div>;
+      case 'left': return <div key={key} style={{ textAlign: 'left' }}>{children}</div>;
+      case 'right': return <div key={key} style={{ textAlign: 'right' }}>{children}</div>;
+      case 'list': {
+        const items = (node.children || []).filter((child) => child.tag === 'li');
+        const listItems = items.length ? items : [{ tag: 'li', children: node.children || [] }];
+        return node.attr === '1' || node.attr.toLowerCase() === 'decimal'
+          ? <ol key={key}>{listItems.map((item, i) => <li key={key + '-li-' + i}>{renderBBNodes(item.children || [], key + '-li-' + i)}</li>)}</ol>
+          : <ul key={key}>{listItems.map((item, i) => <li key={key + '-li-' + i}>{renderBBNodes(item.children || [], key + '-li-' + i)}</li>)}</ul>;
+      }
+      case 'li': return <li key={key}>{children}</li>;
+      default: return <span key={key}>{children}</span>;
+    }
+  });
+}
+
+function BBCodeContent({ value }) {
+  return <div className="bbcode-content">{renderBBNodes(parseBBCode(value))}</div>;
+}
+
+function insertBBCode(textareaRef, setValue, tag) {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+  let open = '[' + tag + ']';
+  let close = '[/' + tag + ']';
+  if (tag === 'url' || tag === 'img') {
+    const url = window.prompt(tag === 'url' ? 'Введите адрес ссылки:' : 'Введите HTTPS-адрес изображения:');
+    if (!url) return;
+    if (!safeWebUrl(url) || (tag === 'img' && !url.trim().toLowerCase().startsWith('https://'))) {
+      window.alert('Укажите корректный ' + (tag === 'img' ? 'HTTPS-адрес изображения.' : 'адрес ссылки.'));
+      return;
+    }
+    open = tag === 'url' ? '[url=' + url.trim() + ']' : '[img]';
+    close = '[/' + tag + ']';
+    if (tag === 'img') {
+      const insertion = open + url.trim() + close;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const value = textarea.value;
+      setValue(value.slice(0, start) + insertion + value.slice(end));
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + insertion.length, start + insertion.length);
+      });
+      return;
+    }
+  } else if (tag === 'color') {
+    const color = window.prompt('Цвет текста (например, #d32f2f):', '#d32f2f');
+    if (!color || !/^(#[0-9a-f]{3,8}|[a-z]{3,20})$/i.test(color.trim())) return;
+    open = '[color=' + color.trim() + ']';
+  }
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const value = textarea.value;
+  const selected = value.slice(start, end);
+  const placeholder = selected || 'текст';
+  const insertion = open + placeholder + close;
+  setValue(value.slice(0, start) + insertion + value.slice(end));
+  const cursor = start + open.length + placeholder.length;
+  requestAnimationFrame(() => {
+    textarea.focus();
+    textarea.setSelectionRange(selected ? cursor : start + open.length, selected ? cursor : start + open.length + placeholder.length);
+  });
+}
 
 const dateLabel = (value) => new Intl.DateTimeFormat('ru-RU', {
   day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -26,6 +185,8 @@ function App() {
   const [authForm, setAuthForm] = useState({ email: '', password: '', username: '' });
   const [threadForm, setThreadForm] = useState({ title: '', body: '', category_id: '' });
   const [reply, setReply] = useState('');
+  const replyTextareaRef = useRef(null);
+  const threadBodyTextareaRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -460,7 +621,7 @@ function App() {
                   </aside>
                   <div className="post-content">
                     <div className="post-date">{dateLabel(post.created_at)}</div>
-                    <p>{post.body}</p>
+                    <div className="post-body"><BBCodeContent value={post.body} /></div>
                   </div>
                 </article>
               ))}
@@ -469,7 +630,7 @@ function App() {
             {currentThread.is_locked ? <div className="locked-note"><LockKeyhole size={16} /> Тема закрыта для ответов.</div> : (
               <form className="reply-box" onSubmit={submitReply}>
                 <h3>Написать ответ</h3>
-                {session ? <><textarea value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Ваше сообщение…" rows={4} required maxLength={20000} /><button className="primary-button" disabled={busy || !reply.trim()}><Send size={15} /> Отправить ответ</button></>
+                {session ? <><BBCodeToolbar onInsert={(tag) => insertBBCode(replyTextareaRef, setReply, tag)} /><textarea ref={replyTextareaRef} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Ваше сообщение…" rows={4} required maxLength={20000} /><button className="primary-button" disabled={busy || !reply.trim()}><Send size={15} /> Отправить ответ</button></>
                   : <p>Чтобы ответить, <button type="button" className="inline-link" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>войдите в аккаунт</button>.</p>}
               </form>
             )}
@@ -655,7 +816,7 @@ function App() {
             <form className="modal-form" onSubmit={createThread}>
               <label><span>Раздел</span><select required value={threadForm.category_id || selectedCategory?.id || ''} onChange={(e) => setThreadForm({ ...threadForm, category_id: e.target.value })}><option value="">Выберите раздел</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
               <label><span>Заголовок темы</span><input required minLength={3} maxLength={180} value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value })} placeholder="О чём хотите поговорить?" /></label>
-              <label><span>Сообщение</span><textarea required maxLength={20000} rows={5} value={threadForm.body} onChange={(e) => setThreadForm({ ...threadForm, body: e.target.value })} placeholder="Напишите первое сообщение…" /></label>
+              <label><span>Сообщение</span><BBCodeToolbar onInsert={(tag) => insertBBCode(threadBodyTextareaRef, (value) => setThreadForm((current) => ({ ...current, body: value })), tag)} /><textarea ref={threadBodyTextareaRef} required maxLength={20000} rows={5} value={threadForm.body} onChange={(e) => setThreadForm({ ...threadForm, body: e.target.value })} placeholder="Напишите первое сообщение…" /></label>
               <button className="primary-button modal-submit" disabled={busy || !categories.length}>{busy ? 'Публикуем…' : 'Опубликовать тему'}</button>
             </form>
           </section>
