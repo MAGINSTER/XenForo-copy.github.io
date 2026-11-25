@@ -13,6 +13,8 @@ const dateLabel = (value) => new Intl.DateTimeFormat('ru-RU', {
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({ username: '', bio: '' });
   const [categories, setCategories] = useState([]);
   const [threads, setThreads] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -46,11 +48,16 @@ function App() {
       const { data } = await supabase.from('profiles')
         .select('id,username,avatar_url,bio,role')
         .eq('id', session.user.id).maybeSingle();
-      if (active) setProfile(data || {
-        id: session.user.id,
-        username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Участник',
-        role: 'member'
-      });
+      if (active) {
+        const nextProfile = data || {
+          id: session.user.id,
+          username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Участник',
+          bio: '',
+          role: 'member'
+        };
+        setProfile(nextProfile);
+        setProfileForm({ username: nextProfile.username || '', bio: nextProfile.bio || '' });
+      }
     }
     loadProfile();
     return () => { active = false; };
@@ -125,6 +132,41 @@ function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openProfile() {
+    if (!session?.user) {
+      setAuthMode('login');
+      setAuthOpen(true);
+      return;
+    }
+    setProfileForm({ username: profile?.username || '', bio: profile?.bio || '' });
+    setProfileOpen(true);
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    if (!session?.user) return;
+    const username = profileForm.username.trim();
+    if (username.length < 3 || username.length > 32) {
+      setMessage('Имя пользователя должно содержать от 3 до 32 символов.');
+      return;
+    }
+    setBusy(true);
+    setMessage('');
+    const { data, error } = await supabase.from('profiles')
+      .update({ username, bio: profileForm.bio.trim() || null })
+      .eq('id', session.user.id)
+      .select('id,username,avatar_url,bio,role')
+      .single();
+    if (error) {
+      setMessage(error.code === '23505' ? 'Это имя пользователя уже занято.' : 'Не удалось сохранить профиль: ' + error.message);
+    } else {
+      setProfile(data);
+      setProfileOpen(false);
+      setMessage('Профиль успешно обновлён.');
+    }
+    setBusy(false);
   }
 
   async function signOut() {
@@ -235,14 +277,14 @@ function App() {
           <nav className="main-nav">
             <a className={!selectedThread ? 'active' : ''} href="#forums" onClick={() => { setSelectedCategory(null); setSelectedThread(null); }}>Форумы</a>
             <a href="#whats-new" onClick={() => { setSelectedCategory(null); setSelectedThread(null); }}>Что нового</a>
-            <a href="#members">Участники</a>
+            <a href="#members" onClick={(e) => { e.preventDefault(); openProfile(); }}>Участники</a>
           </nav>
           <div className="header-actions">
             <label className="header-search"><Search size={16} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск тем" /></label>
             <button className="icon-button" aria-label="Обновить" onClick={loadForum}><RefreshCw size={17} /></button>
             {session ? (
               <div className="account-actions">
-                <span className="account-name"><UserRound size={15} /> {profile?.username || 'Участник'}</span>
+                <button className="account-name" onClick={openProfile} title="Открыть профиль"><UserRound size={15} /> {profile?.username || 'Участник'}</button>
                 <button className="login-button" onClick={signOut}><LogOut size={15} /> Выйти</button>
               </div>
             ) : (
@@ -402,6 +444,23 @@ function App() {
               <button className="primary-button modal-submit" disabled={busy}>{busy ? 'Подождите…' : authMode === 'register' ? 'Зарегистрироваться' : 'Войти'}</button>
             </form>
             <div className="modal-switch">{authMode === 'register' ? 'Уже есть аккаунт?' : 'Ещё нет аккаунта?'} <button onClick={() => setAuthMode(authMode === 'register' ? 'login' : 'register')}>{authMode === 'register' ? 'Войти' : 'Зарегистрироваться'}</button></div>
+          </section>
+        </div>
+      )}
+
+      {profileOpen && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setProfileOpen(false); }}>
+          <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+            <button className="modal-close" onClick={() => setProfileOpen(false)} aria-label="Закрыть"><X size={18} /></button>
+            <div className="modal-symbol"><UserRound size={23} /></div>
+            <h2 id="profile-title">Мой профиль</h2>
+            <p className="modal-description">Измените имя пользователя и информацию о себе.</p>
+            <form className="modal-form" onSubmit={saveProfile}>
+              <label><span>Имя пользователя</span><input required minLength={3} maxLength={32} value={profileForm.username} onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })} placeholder="Ваш никнейм" /></label>
+              <label><span>О себе</span><textarea rows={4} maxLength={500} value={profileForm.bio} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} placeholder="Расскажите немного о себе…" /></label>
+              <div className="profile-meta">Роль: {profile?.role === 'admin' ? 'Администратор' : profile?.role === 'moderator' ? 'Модератор' : 'Участник'}</div>
+              <button className="primary-button modal-submit" disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить профиль'}</button>
+            </form>
           </section>
         </div>
       )}
