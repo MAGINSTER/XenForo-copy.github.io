@@ -200,3 +200,11 @@ create policy "Admins can update profiles"
   on public.profiles for update to authenticated
   using (exists (select 1 from public.profiles admin_profile where admin_profile.id = (select auth.uid()) and admin_profile.role = 'admin'))
   with check (exists (select 1 from public.profiles admin_profile where admin_profile.id = (select auth.uid()) and admin_profile.role = 'admin'));
+
+
+-- Nested forums and external link nodes.
+alter table public.categories add column if not exists parent_id uuid references public.categories(id) on delete cascade;
+alter table public.categories add column if not exists node_type text not null default 'forum' check (node_type in ('forum','link'));
+alter table public.categories add column if not exists link_url text;
+create index if not exists categories_parent_sort_idx on public.categories(parent_id, sort_order, name);
+
