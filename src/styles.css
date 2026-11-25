@@ -311,3 +311,25 @@ button.account-name:hover{color:#fff;text-decoration:underline}
   object-fit: contain;
 }
 .post-body { padding-top: 12px; }
+
+
+/* Nested forum navigation */
+.subcategory-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin-top: 12px;
+}
+.subcategory-link {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #718096);
+  padding: 2px 0;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  text-align: left;
+}
+.subcategory-link:hover { color: var(--primary, #0d8edb); }
+.nested-category-list { margin: 0 0 22px; }
+.nested-category-list .category-card { cursor: pointer; }
