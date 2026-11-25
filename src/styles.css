@@ -333,3 +333,23 @@ button.account-name:hover{color:#fff;text-decoration:underline}
 .subcategory-link:hover { color: var(--primary, #0d8edb); }
 .nested-category-list { margin: 0 0 22px; }
 .nested-category-list .category-card { cursor: pointer; }
+
+
+/* XenForo node view and inline quick-thread form */
+.xenforo-node-card .category-last { min-width: 180px; }
+.xenforo-node-card .category-main { min-width: 0; }
+.xenforo-node-card .category-meta { margin-top: 9px; }
+.quick-thread-panel { margin-top: 28px; padding: 22px; border: 1px solid var(--border, #e5e7eb); border-radius: 14px; background: var(--surface, #fff); }
+.quick-thread-form { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; }
+.quick-thread-form input, .quick-thread-form select, .quick-thread-form textarea { width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid var(--border, #d8dee8); border-radius: 9px; background: var(--input-bg, #fff); color: inherit; font: inherit; }
+.quick-thread-form .bbcode-toolbar, .quick-thread-form textarea, .quick-thread-form button[type="submit"], .quick-thread-form > button { grid-column: 1 / -1; }
+.quick-thread-form textarea { resize: vertical; }
+.thread-prefix { display: inline-block; margin-right: 5px; padding: 2px 7px; border-radius: 4px; background: #e8edf7; color: #34496d; font-size: 11px; font-weight: 700; }
+.category-last a { color: inherit; text-decoration: none; }
+.category-last a:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .quick-thread-form { grid-template-columns: 1fr; }
+  .quick-thread-form input, .quick-thread-form select, .quick-thread-form textarea, .quick-thread-form .bbcode-toolbar, .quick-thread-form > button { grid-column: 1; }
+  .quick-thread-panel { padding: 15px; }
+  .xenforo-node-card .category-last { display: none; }
+}
