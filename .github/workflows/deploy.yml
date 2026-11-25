@@ -1,4 +1,5 @@
 name: Deploy forum to GitHub Pages
+# Trigger a clean deployment with a fresh artifact set.
 
 on:
   push:
