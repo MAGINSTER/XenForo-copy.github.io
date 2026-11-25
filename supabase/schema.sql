@@ -110,3 +110,33 @@ from (values
 where not exists (
   select 1 from public.categories existing where existing.name = seed.name
 );
+
+-- Prevent users from assigning themselves elevated roles through the public API.
+create or replace function public.protect_profile_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is not null then
+    if tg_op = 'INSERT' and new.role <> 'member' then
+      raise exception 'New profiles must start as members';
+    end if;
+    if tg_op = 'UPDATE'
+       and new.role is distinct from old.role
+       and not exists (
+         select 1 from public.profiles p
+         where p.id = auth.uid() and p.role = 'admin'
+       ) then
+      raise exception 'Only an administrator can change profile roles';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_role_trigger on public.profiles;
+create trigger protect_profile_role_trigger
+  before insert or update on public.profiles
+  for each row execute procedure public.protect_profile_role();
