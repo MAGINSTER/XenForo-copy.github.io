@@ -207,3 +207,107 @@ button.account-name:hover{color:#fff;text-decoration:underline}
   .admin-list-row { align-items: flex-start; }
   .thread-row-tools { gap: 4px; }
 }
+
+
+/* BBCode editor and rendered post formatting */
+.bbcode-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0 8px;
+  padding: 7px;
+  border: 1px solid #dce3eb;
+  border-radius: 7px;
+  background: #f7f9fc;
+}
+.bbcode-toolbar button {
+  min-width: 29px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid #d9e1ea;
+  border-radius: 5px;
+  background: #fff;
+  color: #425a72;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bbcode-toolbar button:hover {
+  color: #276da7;
+  border-color: #8ab6d8;
+  background: #f0f7fc;
+}
+.bbcode-toolbar span {
+  margin-left: auto;
+  color: #98a5b3;
+  font-size: 10px;
+}
+.bbcode-content {
+  color: #405368;
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.bbcode-content a {
+  color: #2879b8;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.bbcode-content ul,
+.bbcode-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+.bbcode-quote {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #78a9d0;
+  border-radius: 0 6px 6px 0;
+  background: #f3f7fb;
+  color: #62778c;
+}
+.bbcode-quote cite {
+  display: block;
+  margin-bottom: 6px;
+  color: #3f6f96;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+.bbcode-code {
+  margin: 12px 0;
+  padding: 13px;
+  overflow-x: auto;
+  border: 1px solid #dce3eb;
+  border-radius: 6px;
+  background: #f5f7fa;
+  color: #35495e;
+  font: 12px/1.6 Consolas, Monaco, monospace;
+  white-space: pre-wrap;
+}
+.bbcode-spoiler {
+  margin: 10px 0;
+  padding: 9px 12px;
+  border: 1px solid #dce3eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+.bbcode-spoiler summary {
+  color: #4d6b86;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+.bbcode-spoiler > div { margin-top: 8px; }
+.bbcode-image {
+  display: block;
+  max-width: 100%;
+  max-height: 620px;
+  margin: 10px 0;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.post-body { padding-top: 12px; }
