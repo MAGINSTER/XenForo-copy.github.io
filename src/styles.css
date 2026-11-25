@@ -97,3 +97,113 @@ button:disabled{opacity:.55;cursor:not-allowed}
 button.account-name{border:0;background:transparent;padding:6px 2px;cursor:pointer;font:inherit}
 button.account-name:hover{color:#fff;text-decoration:underline}
 .profile-meta{font-size:11px;color:#8996a4;padding:3px 0}
+
+
+/* Forum administration */
+.moderation-actions,
+.thread-row-tools,
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.moderation-actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, #e7eaf0);
+}
+.thread-row-tools { margin-left: auto; }
+.mini-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border, #e7eaf0);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--muted, #667085);
+  cursor: pointer;
+}
+.mini-tool:hover { color: var(--primary, #5267d8); border-color: var(--primary, #5267d8); }
+.danger-text { color: #c24141 !important; }
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid #efb6b6;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #b42318;
+  font-weight: 600;
+  cursor: pointer;
+}
+.admin-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+}
+.admin-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, #e7eaf0);
+}
+.admin-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+.admin-category-form {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+.admin-category-form input,
+.admin-list-row select {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e7eaf0);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.admin-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e7eaf0);
+  border-radius: 10px;
+}
+.admin-list-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.admin-list-row strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.admin-list-row small {
+  color: var(--muted, #667085);
+  font-size: 12px;
+}
+@media (max-width: 680px) {
+  .admin-category-form { grid-template-columns: 1fr; }
+  .admin-list-row { align-items: flex-start; }
+  .thread-row-tools { gap: 4px; }
+}
