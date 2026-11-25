@@ -31,8 +31,13 @@ function parseBBCode(source) {
     if (match.index > lastIndex) stack[stack.length - 1].children.push({ text: source.slice(lastIndex, match.index) });
     const raw = match[1];
     if (raw === '*') {
-      const listNode = [...stack].reverse().find((node) => node.tag === 'list');
-      if (listNode) listNode.children.push({ tag: 'li', attr: '', children: [] });
+      const listIndex = stack.map((node) => node.tag).lastIndexOf('list');
+      if (listIndex > 0) {
+        stack.length = listIndex + 1;
+        const item = { tag: 'li', attr: '', children: [] };
+        stack[listIndex].children.push(item);
+        stack.push(item);
+      }
       lastIndex = tokenPattern.lastIndex;
       continue;
     }
