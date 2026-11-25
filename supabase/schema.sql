@@ -193,3 +193,10 @@ $$;
 drop trigger if exists prevent_posts_in_locked_threads_trigger on public.posts;
 create trigger prevent_posts_in_locked_threads_trigger
   before insert on public.posts for each row execute function public.prevent_posts_in_locked_threads();
+
+-- Allow administrators to manage member roles. The role-protection trigger
+-- still prevents non-admins from assigning elevated roles.
+create policy "Admins can update profiles"
+  on public.profiles for update to authenticated
+  using (exists (select 1 from public.profiles admin_profile where admin_profile.id = (select auth.uid()) and admin_profile.role = 'admin'))
+  with check (exists (select 1 from public.profiles admin_profile where admin_profile.id = (select auth.uid()) and admin_profile.role = 'admin'));
