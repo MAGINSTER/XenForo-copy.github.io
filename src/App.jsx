@@ -198,7 +198,7 @@ function App() {
   const [search, setSearch] = useState('');
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [adminUsers, setAdminUsers] = useState([]);
-  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', parent_id: '' });
   const isAdmin = profile?.role === 'admin';
   const isStaff = profile?.role === 'admin' || profile?.role === 'moderator';
 
@@ -237,7 +237,7 @@ function App() {
   async function loadForum() {
     setLoading(true);
     const [categoryResult, threadResult] = await Promise.all([
-      supabase.from('categories').select('id,name,description,sort_order').order('sort_order', { ascending: true }),
+      supabase.from('categories').select('id,name,description,sort_order,parent_id,node_type,link_url').order('sort_order', { ascending: true }),
       supabase.from('threads')
         .select('id,category_id,author_id,title,is_pinned,is_locked,created_at,updated_at,author:profiles!threads_author_id_fkey(username,avatar_url,role),category:categories!threads_category_id_fkey(name),posts(count)')
         .order('is_pinned', { ascending: false })
@@ -423,11 +423,12 @@ function App() {
     const { error } = await supabase.from('categories').insert({
       name,
       description: categoryForm.description.trim(),
-      sort_order: categories.length + 1
+      parent_id: categoryForm.parent_id || null,
+      sort_order: categories.filter((item) => item.parent_id === (categoryForm.parent_id || null)).length + 1
     });
     if (error) setMessage('Не удалось создать раздел: ' + error.message);
     else {
-      setCategoryForm({ name: '', description: '' });
+      setCategoryForm({ name: '', description: '', parent_id: '' });
       await loadForum();
       setMessage('Раздел создан.');
     }
@@ -528,6 +529,10 @@ function App() {
     : null;
 
   function openCategory(category) {
+    if (category.node_type === 'link' && category.link_url) {
+      window.open(category.link_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
     setSelectedThread(null);
     setSelectedCategory(category);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -649,17 +654,19 @@ function App() {
               </div>
               {!selectedCategory && (
                 <div className="category-list">
-                  {categories.map((category, index) => {
+                  {categories.filter((category) => !category.parent_id).map((category, index) => {
                     const categoryThreads = threads.filter((thread) => thread.category_id === category.id);
+                    const childCategories = categories.filter((child) => child.parent_id === category.id);
                     const countPosts = categoryThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
                     const last = categoryThreads[0];
                     return (
                       <article className="category-card" key={category.id} onClick={() => openCategory(category)}>
-                        <div className="category-icon">{['💬', '📢', '🛠️', '🛒'][index % 4]}</div>
+                        <div className="category-icon">{category.node_type === 'link' ? '🔗' : ['💬', '📢', '🛠️', '🛒'][index % 4]}</div>
                         <div className="category-main">
                           <button className="category-title" onClick={() => openCategory(category)}>{category.name}</button>
                           <p>{category.description}</p>
                           <div className="category-meta"><span><MessageSquare size={13} /> {categoryThreads.length} тем</span><span><MessagesSquare size={13} /> {countPosts} сообщений</span></div>
+                          {childCategories.length > 0 && <div className="subcategory-list">{childCategories.sort((a, b) => a.sort_order - b.sort_order).map((child) => <button type="button" key={child.id} className="subcategory-link" onClick={(event) => { event.stopPropagation(); openCategory(child); }}>{child.node_type === 'link' ? '↗' : '▸'} {child.name}</button>)}</div>}
                         </div>
                         <div className="category-last"><span className="last-label">Последнее обсуждение</span><strong>{last?.title || 'Пока нет сообщений'}</strong><small>{last?.author?.username || 'Будьте первым!'}</small></div>
                         <ChevronRight className="category-chevron" size={18} />
@@ -671,6 +678,7 @@ function App() {
                 </div>
               )}
 
+              {selectedCategory && categories.some((category) => category.parent_id === selectedCategory.id) && <div className="category-list nested-category-list">{categories.filter((category) => category.parent_id === selectedCategory.id).sort((a, b) => a.sort_order - b.sort_order).map((child) => <article className="category-card" key={child.id} onClick={() => openCategory(child)}><div className="category-icon">{child.node_type === 'link' ? '🔗' : '📁'}</div><div className="category-main"><button className="category-title" onClick={() => openCategory(child)}>{child.name}</button><p>{child.description}</p></div><ChevronRight className="category-chevron" size={18} /></article>)}</div>}
               <div className="section-heading whats-new-heading" id="whats-new">
                 <div><h2>{selectedCategory ? 'Темы раздела' : 'Последние обсуждения'}</h2><p>{selectedCategory ? 'Все темы выбранного раздела' : 'Недавняя активность на форуме'}</p></div>
                 {session && <button className="text-button" onClick={() => { setThreadForm({ ...threadForm, category_id: selectedCategory?.id || '' }); setThreadOpen(true); }}><Plus size={14} /> Создать тему</button>}
@@ -766,15 +774,16 @@ function App() {
             <p className="modal-description">Управление разделами, темами и участниками форума.</p>
 
             <section className="admin-section">
-              <h3><FolderPlus size={17} /> Создать раздел</h3>
+              <h3><FolderPlus size={17} /> Создать форум или подфорум</h3>
               <form className="admin-category-form" onSubmit={createCategory}>
                 <input required minLength={2} maxLength={80} value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Название раздела" />
                 <input maxLength={240} value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} placeholder="Краткое описание" />
+                <select value={categoryForm.parent_id} onChange={(e) => setCategoryForm({ ...categoryForm, parent_id: e.target.value })}><option value="">Главный форум</option>{categories.filter((item) => item.node_type !== 'link').map((item) => <option key={item.id} value={item.id}>Подфорум: {item.name}</option>)}</select>
                 <button className="primary-button" disabled={busy}><Plus size={15} /> Добавить</button>
               </form>
               <div className="admin-list">
                 {categories.map((category) => <div className="admin-list-row" key={category.id}>
-                  <div><strong>{category.name}</strong><small>{category.description || 'Без описания'}</small></div>
+                  <div><strong>{category.name}</strong><small>{category.parent_id ? '↳ ' : ''}{category.description || 'Без описания'}</small></div>
                   <button className="mini-tool danger-text" title="Удалить раздел" onClick={() => deleteCategory(category)}><Trash2 size={15} /></button>
                 </div>)}
               </div>
@@ -819,7 +828,7 @@ function App() {
             <h2 id="thread-modal-title">Создать тему</h2>
             <p className="modal-description">Выберите раздел и напишите первое сообщение.</p>
             <form className="modal-form" onSubmit={createThread}>
-              <label><span>Раздел</span><select required value={threadForm.category_id || selectedCategory?.id || ''} onChange={(e) => setThreadForm({ ...threadForm, category_id: e.target.value })}><option value="">Выберите раздел</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+              <label><span>Раздел</span><select required value={threadForm.category_id || selectedCategory?.id || ''} onChange={(e) => setThreadForm({ ...threadForm, category_id: e.target.value })}><option value="">Выберите раздел</option>{categories.filter((category) => category.node_type !== 'link').map((category) => <option value={category.id} key={category.id}>{category.parent_id ? '— ' : ''}{category.name}</option>)}</select></label>
               <label><span>Заголовок темы</span><input required minLength={3} maxLength={180} value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value })} placeholder="О чём хотите поговорить?" /></label>
               <label><span>Сообщение</span><BBCodeToolbar onInsert={(tag) => insertBBCode(threadBodyTextareaRef, (value) => setThreadForm((current) => ({ ...current, body: value })), tag)} /><textarea ref={threadBodyTextareaRef} required maxLength={20000} rows={5} value={threadForm.body} onChange={(e) => setThreadForm({ ...threadForm, body: e.target.value })} placeholder="Напишите первое сообщение…" /></label>
               <button className="primary-button modal-submit" disabled={busy || !categories.length}>{busy ? 'Публикуем…' : 'Опубликовать тему'}</button>
