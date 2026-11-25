@@ -284,8 +284,9 @@ function App() {
             <button className="icon-button" aria-label="Обновить" onClick={loadForum}><RefreshCw size={17} /></button>
             {session ? (
               <div className="account-actions">
-                <button className="account-name" onClick={openProfile} title="Открыть профиль"><UserRound size={15} /> {profile?.username || 'Участник'}</button>
-                <button className="login-button" onClick={signOut}><LogOut size={15} /> Выйти</button>
+                <button type="button" className="account-name" onClick={openProfile} title="Открыть профиль"><UserRound size={15} /> {profile?.username || 'Участник'}</button>
+                <button type="button" className="login-button" onClick={openProfile}><UserRound size={15} /> Профиль</button>
+                <button type="button" className="login-button" onClick={signOut}><LogOut size={15} /> Выйти</button>
               </div>
             ) : (
               <button className="login-button" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}><LogIn size={16} /> Войти</button>
@@ -415,7 +416,7 @@ function App() {
               </div>
               <div className="side-card online-card">
                 <h3>Ваш аккаунт</h3>
-                {session ? <><div className="online-number"><span className="live-dot" /> {profile?.username || 'Участник'}</div><p>Вы вошли в систему.</p></> : <><div className="online-number"><span className="live-dot" /> Гость</div><p>Войдите или зарегистрируйтесь, чтобы писать.</p><button className="side-action" onClick={() => { setAuthMode('register'); setAuthOpen(true); }}>Создать аккаунт</button></>}
+                {session ? <><div className="online-number"><span className="live-dot" /> {profile?.username || 'Участник'}</div><p>Вы вошли в систему.</p><button type="button" className="side-action" onClick={openProfile}>Открыть профиль</button></> : <><div className="online-number"><span className="live-dot" /> Гость</div><p>Войдите или зарегистрируйтесь, чтобы писать.</p><button className="side-action" onClick={() => { setAuthMode('register'); setAuthOpen(true); }}>Создать аккаунт</button></>}
               </div>
               <div className="side-card help-card">
                 <div className="help-icon"><Clock3 size={18} /></div>
