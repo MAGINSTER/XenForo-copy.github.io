@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase';
 import {
   Search, Bell, MessageSquare, Users, ChevronRight, Menu, LogIn, LogOut,
   Plus, MessagesSquare, ShieldCheck, Clock3, X, ArrowLeft, Send, UserRound,
-  LockKeyhole, Mail, UserPlus, RefreshCw
+  LockKeyhole, Mail, UserPlus, RefreshCw, Trash2, Pin, Lock, Settings, FolderPlus
 } from 'lucide-react';
 
 const dateLabel = (value) => new Intl.DateTimeFormat('ru-RU', {
@@ -30,6 +30,11 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+  const isAdmin = profile?.role === 'admin';
+  const isStaff = profile?.role === 'admin' || profile?.role === 'moderator';
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -179,6 +184,115 @@ function App() {
     }
   }
 
+  async function deleteAccount() {
+    if (!session?.user) return;
+    const confirmed = window.confirm('Удалить аккаунт навсегда? Профиль, темы и сообщения будут удалены. Это действие нельзя отменить.');
+    if (!confirmed) return;
+    setBusy(true);
+    setMessage('');
+    const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+    if (error) {
+      setMessage('Не удалось удалить аккаунт: ' + error.message);
+      setBusy(false);
+      return;
+    }
+    await supabase.auth.signOut();
+    setProfile(null);
+    setProfileOpen(false);
+    setSelectedThread(null);
+    setSelectedCategory(null);
+    setMessage('Аккаунт удалён.');
+    setBusy(false);
+    await loadForum();
+  }
+
+  async function toggleThreadField(thread, field) {
+    if (!isStaff) return;
+    const { error } = await supabase.from('threads')
+      .update({ [field]: !thread[field] })
+      .eq('id', thread.id);
+    if (error) {
+      setMessage('Не удалось изменить тему: ' + error.message);
+      return;
+    }
+    const updated = { ...thread, [field]: !thread[field] };
+    if (selectedThread?.id === thread.id) setSelectedThread(updated);
+    await loadForum();
+    setMessage(field === 'is_pinned'
+      ? (updated[field] ? 'Тема закреплена.' : 'Закрепление снято.')
+      : (updated[field] ? 'Тема закрыта.' : 'Тема открыта.'));
+  }
+
+  async function deleteThread(thread) {
+    if (!isStaff || !window.confirm('Удалить тему и все её сообщения?')) return;
+    const { error } = await supabase.from('threads').delete().eq('id', thread.id);
+    if (error) {
+      setMessage('Не удалось удалить тему: ' + error.message);
+      return;
+    }
+    if (selectedThread?.id === thread.id) setSelectedThread(null);
+    await loadForum();
+    setMessage('Тема удалена.');
+  }
+
+  async function openAdminPanel() {
+    if (!isAdmin) return;
+    setAdminPanelOpen(true);
+    const { data, error } = await supabase.from('profiles')
+      .select('id,username,role,created_at')
+      .order('created_at', { ascending: false });
+    if (error) setMessage('Не удалось загрузить участников: ' + error.message);
+    else setAdminUsers(data || []);
+  }
+
+  async function createCategory(event) {
+    event.preventDefault();
+    if (!isAdmin) return;
+    const name = categoryForm.name.trim();
+    if (name.length < 2 || name.length > 80) {
+      setMessage('Название раздела должно содержать от 2 до 80 символов.');
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.from('categories').insert({
+      name,
+      description: categoryForm.description.trim(),
+      sort_order: categories.length + 1
+    });
+    if (error) setMessage('Не удалось создать раздел: ' + error.message);
+    else {
+      setCategoryForm({ name: '', description: '' });
+      await loadForum();
+      setMessage('Раздел создан.');
+    }
+    setBusy(false);
+  }
+
+  async function deleteCategory(category) {
+    if (!isAdmin || !window.confirm('Удалить раздел «' + category.name + '»? Все темы и сообщения в нём также будут удалены.')) return;
+    const { error } = await supabase.from('categories').delete().eq('id', category.id);
+    if (error) setMessage('Не удалось удалить раздел: ' + error.message);
+    else {
+      if (selectedCategory?.id === category.id) setSelectedCategory(null);
+      await loadForum();
+      setMessage('Раздел удалён.');
+    }
+  }
+
+  async function changeUserRole(user, role) {
+    if (!isAdmin || user.id === session?.user?.id && role !== 'admin') {
+      if (user.id === session?.user?.id && role !== 'admin') setMessage('Нельзя снять роль администратора с самого себя.');
+      return;
+    }
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', user.id);
+    if (error) setMessage('Не удалось изменить роль: ' + error.message);
+    else {
+      setAdminUsers((items) => items.map((item) => item.id === user.id ? { ...item, role } : item));
+      if (user.id === session?.user?.id) setProfile((current) => ({ ...current, role }));
+      setMessage('Роль участника обновлена.');
+    }
+  }
+
   async function createThread(event) {
     event.preventDefault();
     if (!session?.user) {
@@ -284,6 +398,7 @@ function App() {
             <button className="icon-button" aria-label="Обновить" onClick={loadForum}><RefreshCw size={17} /></button>
             {session ? (
               <div className="account-actions">
+                {isAdmin && <button type="button" className="login-button" onClick={openAdminPanel}><Settings size={15} /> Админ-панель</button> }
                 <button type="button" className="account-name" onClick={openProfile} title="Открыть профиль"><UserRound size={15} /> {profile?.username || 'Участник'}</button>
                 <button type="button" className="login-button" onClick={openProfile}><UserRound size={15} /> Профиль</button>
                 <button type="button" className="login-button" onClick={signOut}><LogOut size={15} /> Выйти</button>
@@ -328,6 +443,11 @@ function App() {
               <div className="eyebrow">{currentThread.category?.name || 'ОБСУЖДЕНИЕ'}</div>
               <h1>{currentThread.title}</h1>
               <div className="thread-subline">Автор: <strong>{currentThread.author?.username || 'Участник'}</strong> · {dateLabel(currentThread.created_at)} · {posts.length} сообщений</div>
+            {isStaff && <div className="moderation-actions">
+              <button className="text-button" onClick={() => toggleThreadField(currentThread, 'is_pinned')}><Pin size={14} /> {currentThread.is_pinned ? 'Открепить' : 'Закрепить'}</button>
+              <button className="text-button" onClick={() => toggleThreadField(currentThread, 'is_locked')}><Lock size={14} /> {currentThread.is_locked ? 'Открыть тему' : 'Закрыть тему'}</button>
+              <button className="text-button danger-text" onClick={() => deleteThread(currentThread)}><Trash2 size={14} /> Удалить тему</button>
+            </div>}
             </div>
             <div className="post-list">
               {posts.map((post, index) => (
@@ -398,6 +518,10 @@ function App() {
                       <p>{thread.category?.name || 'Раздел'} · {thread.author?.username || 'Участник'} · {dateLabel(thread.created_at)}</p>
                     </div>
                     <div className="thread-replies"><strong>{thread.posts?.[0]?.count || 0}</strong><span>сообщ.</span></div>
+                    {isStaff && <div className="thread-row-tools" onClick={(e) => e.stopPropagation()}>
+                      <button className="mini-tool" title={thread.is_pinned ? 'Открепить' : 'Закрепить'} onClick={() => toggleThreadField(thread, 'is_pinned')}><Pin size={14} /></button>
+                      <button className="mini-tool" title={thread.is_locked ? 'Открыть' : 'Закрыть'} onClick={() => toggleThreadField(thread, 'is_locked')}><Lock size={14} /></button>
+                    </div>}
                     <ChevronRight size={17} />
                   </article>
                 ))}
@@ -461,7 +585,62 @@ function App() {
               <label><span>О себе</span><textarea rows={4} maxLength={500} value={profileForm.bio} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} placeholder="Расскажите немного о себе…" /></label>
               <div className="profile-meta">Роль: {profile?.role === 'admin' ? 'Администратор' : profile?.role === 'moderator' ? 'Модератор' : 'Участник'}</div>
               <button className="primary-button modal-submit" disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить профиль'}</button>
+              <button type="button" className="danger-button modal-submit" disabled={busy} onClick={deleteAccount}><Trash2 size={15} /> Удалить аккаунт</button>
             </form>
+          </section>
+        </div>
+      )}
+
+      {adminPanelOpen && isAdmin && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setAdminPanelOpen(false); }}>
+          <section className="modal-card admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+            <button className="modal-close" onClick={() => setAdminPanelOpen(false)} aria-label="Закрыть"><X size={18} /></button>
+            <div className="modal-symbol"><Settings size={23} /></div>
+            <h2 id="admin-title">Панель администратора</h2>
+            <p className="modal-description">Управление разделами, темами и участниками форума.</p>
+
+            <section className="admin-section">
+              <h3><FolderPlus size={17} /> Создать раздел</h3>
+              <form className="admin-category-form" onSubmit={createCategory}>
+                <input required minLength={2} maxLength={80} value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Название раздела" />
+                <input maxLength={240} value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} placeholder="Краткое описание" />
+                <button className="primary-button" disabled={busy}><Plus size={15} /> Добавить</button>
+              </form>
+              <div className="admin-list">
+                {categories.map((category) => <div className="admin-list-row" key={category.id}>
+                  <div><strong>{category.name}</strong><small>{category.description || 'Без описания'}</small></div>
+                  <button className="mini-tool danger-text" title="Удалить раздел" onClick={() => deleteCategory(category)}><Trash2 size={15} /></button>
+                </div>)}
+              </div>
+            </section>
+
+            <section className="admin-section">
+              <h3><Users size={17} /> Участники и роли</h3>
+              <div className="admin-list">
+                {adminUsers.map((user) => <div className="admin-list-row" key={user.id}>
+                  <div><strong>{user.username}</strong><small>{user.role === 'admin' ? 'Администратор' : user.role === 'moderator' ? 'Модератор' : 'Участник'}</small></div>
+                  <select aria-label={'Роль: ' + user.username} value={user.role} disabled={user.id === session?.user?.id} onChange={(e) => changeUserRole(user, e.target.value)}>
+                    <option value="member">Участник</option><option value="moderator">Модератор</option><option value="admin">Администратор</option>
+                  </select>
+                </div>)}
+                {!adminUsers.length && <small>Участники не найдены.</small>}
+              </div>
+            </section>
+
+            <section className="admin-section">
+              <h3><MessagesSquare size={17} /> Управление темами</h3>
+              <div className="admin-list">
+                {threads.map((thread) => <div className="admin-list-row" key={thread.id}>
+                  <div><strong>{thread.title}</strong><small>{thread.category?.name || 'Раздел'} · {thread.author?.username || 'Участник'}{thread.is_locked ? ' · Закрыта' : ''}{thread.is_pinned ? ' · Закреплена' : ''}</small></div>
+                  <div className="admin-row-actions">
+                    <button className="mini-tool" title={thread.is_pinned ? 'Открепить' : 'Закрепить'} onClick={() => toggleThreadField(thread, 'is_pinned')}><Pin size={14} /></button>
+                    <button className="mini-tool" title={thread.is_locked ? 'Открыть' : 'Закрыть'} onClick={() => toggleThreadField(thread, 'is_locked')}><Lock size={14} /></button>
+                    <button className="mini-tool danger-text" title="Удалить тему" onClick={() => deleteThread(thread)}><Trash2 size={14} /></button>
+                  </div>
+                </div>)}
+                {!threads.length && <small>Тем пока нет.</small>}
+              </div>
+            </section>
           </section>
         </div>
       )}
