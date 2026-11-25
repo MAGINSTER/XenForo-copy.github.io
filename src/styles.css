@@ -91,3 +91,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .thread-row-main p{line-height:1.5}
  .modal-card{padding:23px 19px}
 }
+
+
+/* Profile controls */
+button.account-name{border:0;background:transparent;padding:6px 2px;cursor:pointer;font:inherit}
+button.account-name:hover{color:#fff;text-decoration:underline}
+.profile-meta{font-size:11px;color:#8996a4;padding:3px 0}
