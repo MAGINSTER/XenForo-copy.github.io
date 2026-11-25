@@ -140,3 +140,56 @@ drop trigger if exists protect_profile_role_trigger on public.profiles;
 create trigger protect_profile_role_trigger
   before insert or update on public.profiles
   for each row execute procedure public.protect_profile_role();
+
+
+-- Forum administration permissions.
+create policy "Admins can create categories"
+  on public.categories for insert to authenticated
+  with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+create policy "Admins can update categories"
+  on public.categories for update to authenticated
+  using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+create policy "Admins can delete categories"
+  on public.categories for delete to authenticated
+  using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+
+create policy "Moderators can manage thread status"
+  on public.threads for update to authenticated
+  using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin','moderator')))
+  with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin','moderator')));
+create policy "Moderators can delete threads"
+  on public.threads for delete to authenticated
+  using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin','moderator')));
+create policy "Moderators can delete posts"
+  on public.posts for delete to authenticated
+  using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin','moderator')));
+
+create or replace function public.guard_thread_moderation_fields()
+returns trigger language plpgsql set search_path = '' as $$
+declare actor_role text;
+begin
+  select p.role into actor_role from public.profiles p where p.id = (select auth.uid());
+  if (new.is_pinned is distinct from old.is_pinned or new.is_locked is distinct from old.is_locked)
+     and coalesce(actor_role, 'member') not in ('admin','moderator') then
+    raise exception 'Only moderators and administrators can pin or lock threads';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists guard_thread_moderation_fields_trigger on public.threads;
+create trigger guard_thread_moderation_fields_trigger
+  before update on public.threads for each row execute function public.guard_thread_moderation_fields();
+
+create or replace function public.prevent_posts_in_locked_threads()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if exists (select 1 from public.threads t where t.id = new.thread_id and t.is_locked) then
+    raise exception 'This thread is locked';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists prevent_posts_in_locked_threads_trigger on public.posts;
+create trigger prevent_posts_in_locked_threads_trigger
+  before insert on public.posts for each row execute function public.prevent_posts_in_locked_threads();
