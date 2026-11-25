@@ -1,5 +1,5 @@
 name: Deploy forum to GitHub Pages
-# Trigger a clean deployment with a fresh artifact set.
+# Publish the Vite dist output through GitHub Actions only.
 
 on:
   push:
