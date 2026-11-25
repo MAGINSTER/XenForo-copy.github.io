@@ -702,8 +702,8 @@ function App() {
                   <ChevronRight className="category-chevron" size={18} />
                 </article>;
               })}</div>}
-{selectedCategory?.xenforo_node_id === 3 && <section className="quick-thread-panel">
-                <div className="section-heading"><div><h2>Создать тему</h2><p>Быстрая публикация в разделе «Сервер LSPD»</p></div></div>
+{selectedCategory?.xenforo_node_id === 4 && <section className="quick-thread-panel">
+                <div className="section-heading"><div><h2>Создать тему</h2><p>Быстрая публикация в разделе «LSPD»</p></div></div>
                 {session ? <form className="quick-thread-form" onSubmit={createThread}>
                   <input required minLength={3} maxLength={180} aria-label="Заголовок" placeholder="Заголовок" value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value, category_id: threadForm.category_id || selectedCategory.id })} />
                   <select aria-label="Префикс" value={threadForm.prefix} onChange={(e) => setThreadForm({ ...threadForm, prefix: e.target.value })}>
