@@ -188,7 +188,8 @@ function App() {
   const [authMode, setAuthMode] = useState('login');
   const [threadOpen, setThreadOpen] = useState(false);
   const [authForm, setAuthForm] = useState({ email: '', password: '', username: '' });
-  const [threadForm, setThreadForm] = useState({ title: '', body: '', category_id: '' });
+  const [threadForm, setThreadForm] = useState({ title: '', body: '', category_id: '', prefix: '' });
+  const quickThreadBodyRef = useRef(null);
   const [reply, setReply] = useState('');
   const replyTextareaRef = useRef(null);
   const threadBodyTextareaRef = useRef(null);
@@ -237,9 +238,9 @@ function App() {
   async function loadForum() {
     setLoading(true);
     const [categoryResult, threadResult] = await Promise.all([
-      supabase.from('categories').select('id,name,description,sort_order,parent_id,node_type,link_url').order('sort_order', { ascending: true }),
+      supabase.from('categories').select('id,name,description,sort_order,parent_id,node_type,link_url,xenforo_node_id,display_thread_count,display_post_count,last_thread_title,last_post_author,last_post_at,last_thread_url').order('sort_order', { ascending: true }),
       supabase.from('threads')
-        .select('id,category_id,author_id,title,is_pinned,is_locked,created_at,updated_at,author:profiles!threads_author_id_fkey(username,avatar_url,role),category:categories!threads_category_id_fkey(name),posts(count)')
+        .select('id,category_id,author_id,title,prefix,is_pinned,is_locked,created_at,updated_at,author:profiles!threads_author_id_fkey(username,avatar_url,role),category:categories!threads_category_id_fkey(name),posts(count)')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(60)
@@ -473,7 +474,8 @@ function App() {
     const { data: created, error } = await supabase.from('threads').insert({
       category_id: categoryId,
       author_id: session.user.id,
-      title: threadForm.title.trim()
+      title: threadForm.title.trim(),
+      prefix: threadForm.prefix || null
     }).select('id').single();
     if (error) {
       setMessage('Не удалось создать тему: ' + error.message);
@@ -486,7 +488,7 @@ function App() {
       body: threadForm.body.trim()
     });
     setThreadOpen(false);
-    setThreadForm({ title: '', body: '', category_id: '' });
+    setThreadForm({ title: '', body: '', category_id: '', prefix: '' });
     await loadForum();
     const { data: fullThread } = await supabase.from('threads')
       .select('id,category_id,author_id,title,is_pinned,is_locked,created_at,updated_at,author:profiles!threads_author_id_fkey(username,avatar_url,role),category:categories!threads_category_id_fkey(name),posts(count)')
@@ -656,19 +658,23 @@ function App() {
                 <div className="category-list">
                   {categories.filter((category) => !category.parent_id).map((category, index) => {
                     const categoryThreads = threads.filter((thread) => thread.category_id === category.id);
-                    const childCategories = categories.filter((child) => child.parent_id === category.id);
-                    const countPosts = categoryThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
+                    
+                    const countPosts = category.display_post_count ?? categoryThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
+                    const threadCount = category.display_thread_count ?? categoryThreads.length;
+                    const childCategories = categories.filter((child) => child.parent_id === category.id).sort((a, b) => a.sort_order - b.sort_order);
                     const last = categoryThreads[0];
+                    const lastTitle = category.last_thread_title || last?.title;
+                    const lastAuthor = category.last_post_author || last?.author?.username;
                     return (
                       <article className="category-card" key={category.id} onClick={() => openCategory(category)}>
                         <div className="category-icon">{category.node_type === 'link' ? '🔗' : ['💬', '📢', '🛠️', '🛒'][index % 4]}</div>
                         <div className="category-main">
                           <button className="category-title" onClick={() => openCategory(category)}>{category.name}</button>
                           <p>{category.description}</p>
-                          <div className="category-meta"><span><MessageSquare size={13} /> {categoryThreads.length} тем</span><span><MessagesSquare size={13} /> {countPosts} сообщений</span></div>
+                          <div className="category-meta"><span><MessageSquare size={13} /> {threadCount} тем</span><span><MessagesSquare size={13} /> {countPosts} сообщений</span></div>
                           {childCategories.length > 0 && <div className="subcategory-list">{childCategories.sort((a, b) => a.sort_order - b.sort_order).map((child) => <button type="button" key={child.id} className="subcategory-link" onClick={(event) => { event.stopPropagation(); openCategory(child); }}>{child.node_type === 'link' ? '↗' : '▸'} {child.name}</button>)}</div>}
                         </div>
-                        <div className="category-last"><span className="last-label">Последнее обсуждение</span><strong>{last?.title || 'Пока нет сообщений'}</strong><small>{last?.author?.username || 'Будьте первым!'}</small></div>
+                        <div className="category-last"><span className="last-label">Последнее обсуждение</span><strong>{category.last_thread_url ? <a href={category.last_thread_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{lastTitle}</a> : (lastTitle || 'Пока нет сообщений')}</strong><small>{lastAuthor || 'Будьте первым!'}{category.last_post_at ? ' · ' + dateLabel(category.last_post_at) : ''}</small></div>
                         <ChevronRight className="category-chevron" size={18} />
                       </article>
                     );
@@ -678,7 +684,36 @@ function App() {
                 </div>
               )}
 
-              {selectedCategory && categories.some((category) => category.parent_id === selectedCategory.id) && <div className="category-list nested-category-list">{categories.filter((category) => category.parent_id === selectedCategory.id).sort((a, b) => a.sort_order - b.sort_order).map((child) => <article className="category-card" key={child.id} onClick={() => openCategory(child)}><div className="category-icon">{child.node_type === 'link' ? '🔗' : '📁'}</div><div className="category-main"><button className="category-title" onClick={() => openCategory(child)}>{child.name}</button><p>{child.description}</p></div><ChevronRight className="category-chevron" size={18} /></article>)}</div>}
+              {selectedCategory && categories.some((category) => category.parent_id === selectedCategory.id) && <div className="category-list nested-category-list">{categories.filter((category) => category.parent_id === selectedCategory.id).sort((a, b) => a.sort_order - b.sort_order).map((child) => {
+                const childThreads = threads.filter((thread) => thread.category_id === child.id);
+                const childPosts = child.display_post_count ?? childThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
+                const childCount = child.display_thread_count ?? childThreads.length;
+                const lastChildThread = childThreads[0];
+                const grandchildren = categories.filter((item) => item.parent_id === child.id).sort((a, b) => a.sort_order - b.sort_order);
+                return <article className="category-card xenforo-node-card" key={child.id} onClick={() => openCategory(child)}>
+                  <div className="category-icon">{child.node_type === 'link' ? '🔗' : '📁'}</div>
+                  <div className="category-main">
+                    <button className="category-title" onClick={() => openCategory(child)}>{child.name}</button>
+                    {child.description && <p>{child.description}</p>}
+                    {child.node_type !== 'link' && <div className="category-meta"><span><MessageSquare size={13} /> {childCount} тем</span><span><MessagesSquare size={13} /> {childPosts} сообщений</span></div>}
+                    {grandchildren.length > 0 && <div className="subcategory-list">{grandchildren.map((grandchild) => <button type="button" key={grandchild.id} className="subcategory-link" onClick={(event) => { event.stopPropagation(); openCategory(grandchild); }}>▸ {grandchild.name}</button>)}</div>}
+                  </div>
+                  <div className="category-last"><span className="last-label">{child.node_type === 'link' ? 'Внешняя ссылка' : 'Последнее обсуждение'}</span><strong>{child.last_thread_title || lastChildThread?.title || (child.node_type === 'link' ? 'Открыть ресурс' : 'Пока нет сообщений')}</strong><small>{child.last_post_author || lastChildThread?.author?.username || (child.node_type === 'link' ? child.link_url : 'Будьте первым!')}</small></div>
+                  <ChevronRight className="category-chevron" size={18} />
+                </article>;
+              })}</div>}
+{selectedCategory?.xenforo_node_id === 3 && <section className="quick-thread-panel">
+                <div className="section-heading"><div><h2>Создать тему</h2><p>Быстрая публикация в разделе «Сервер LSPD»</p></div></div>
+                {session ? <form className="quick-thread-form" onSubmit={createThread}>
+                  <input required minLength={3} maxLength={180} aria-label="Заголовок" placeholder="Заголовок" value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value, category_id: threadForm.category_id || selectedCategory.id })} />
+                  <select aria-label="Префикс" value={threadForm.prefix} onChange={(e) => setThreadForm({ ...threadForm, prefix: e.target.value })}>
+                    <option value="">(Без префикса)</option><optgroup label="Управление темами"><option value="Важно">Важно</option><option value="Информация">Информация</option><option value="Правила">Правила</option></optgroup>
+                  </select>
+                  <BBCodeToolbar onInsert={(tag) => insertBBCode(quickThreadBodyRef, (value) => setThreadForm((current) => ({ ...current, body: value, category_id: current.category_id || selectedCategory.id })), tag)} />
+                  <textarea ref={quickThreadBodyRef} required rows={5} maxLength={20000} placeholder="Текст сообщения…" value={threadForm.body} onChange={(e) => setThreadForm({ ...threadForm, body: e.target.value, category_id: threadForm.category_id || selectedCategory.id })} />
+                  <button className="primary-button" disabled={busy}>{busy ? 'Публикуем…' : 'Создать тему'}</button>
+                </form> : <p>Чтобы создать тему, <button type="button" className="inline-link" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>войдите в аккаунт</button>.</p>}
+              </section>}
               <div className="section-heading whats-new-heading" id="whats-new">
                 <div><h2>{selectedCategory ? 'Темы раздела' : 'Последние обсуждения'}</h2><p>{selectedCategory ? 'Все темы выбранного раздела' : 'Недавняя активность на форуме'}</p></div>
                 {session && <button className="text-button" onClick={() => { setThreadForm({ ...threadForm, category_id: selectedCategory?.id || '' }); setThreadOpen(true); }}><Plus size={14} /> Создать тему</button>}
@@ -689,7 +724,7 @@ function App() {
                     <div className="thread-avatar">{(thread.author?.username || 'У').slice(0, 1).toUpperCase()}</div>
                     <div className="thread-row-main">
                       <button className="thread-title" onClick={() => openThread(thread)}>{thread.is_pinned ? '📌 ' : ''}{thread.title}</button>
-                      <p>{thread.category?.name || 'Раздел'} · {thread.author?.username || 'Участник'} · {dateLabel(thread.created_at)}</p>
+                      <p>{thread.prefix && <span className="thread-prefix">{thread.prefix}</span>} {thread.category?.name || 'Раздел'} · {thread.author?.username || 'Участник'} · {dateLabel(thread.created_at)}</p>
                     </div>
                     <div className="thread-replies"><strong>{thread.posts?.[0]?.count || 0}</strong><span>сообщ.</span></div>
                     {isStaff && <div className="thread-row-tools" onClick={(e) => e.stopPropagation()}>
@@ -829,7 +864,7 @@ function App() {
             <p className="modal-description">Выберите раздел и напишите первое сообщение.</p>
             <form className="modal-form" onSubmit={createThread}>
               <label><span>Раздел</span><select required value={threadForm.category_id || selectedCategory?.id || ''} onChange={(e) => setThreadForm({ ...threadForm, category_id: e.target.value })}><option value="">Выберите раздел</option>{categories.filter((category) => category.node_type !== 'link').map((category) => <option value={category.id} key={category.id}>{category.parent_id ? '— ' : ''}{category.name}</option>)}</select></label>
-              <label><span>Заголовок темы</span><input required minLength={3} maxLength={180} value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value })} placeholder="О чём хотите поговорить?" /></label>
+              <label><span>Префикс</span><select value={threadForm.prefix} onChange={(e) => setThreadForm({ ...threadForm, prefix: e.target.value })}><option value="">(Без префикса)</option><optgroup label="Управление темами"><option value="Важно">Важно</option><option value="Информация">Информация</option><option value="Правила">Правила</option></optgroup></select></label><label><span>Заголовок темы</span><input required minLength={3} maxLength={180} value={threadForm.title} onChange={(e) => setThreadForm({ ...threadForm, title: e.target.value })} placeholder="О чём хотите поговорить?" /></label>
               <label><span>Сообщение</span><BBCodeToolbar onInsert={(tag) => insertBBCode(threadBodyTextareaRef, (value) => setThreadForm((current) => ({ ...current, body: value })), tag)} /><textarea ref={threadBodyTextareaRef} required maxLength={20000} rows={5} value={threadForm.body} onChange={(e) => setThreadForm({ ...threadForm, body: e.target.value })} placeholder="Напишите первое сообщение…" /></label>
               <button className="primary-button modal-submit" disabled={busy || !categories.length}>{busy ? 'Публикуем…' : 'Опубликовать тему'}</button>
             </form>
