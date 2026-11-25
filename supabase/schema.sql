@@ -208,3 +208,18 @@ alter table public.categories add column if not exists node_type text not null d
 alter table public.categories add column if not exists link_url text;
 create index if not exists categories_parent_sort_idx on public.categories(parent_id, sort_order, name);
 
+
+
+-- XenForo node metadata and display statistics.
+alter table public.categories add column if not exists xenforo_node_id integer;
+alter table public.categories add column if not exists display_thread_count integer;
+alter table public.categories add column if not exists display_post_count integer;
+alter table public.categories add column if not exists last_thread_title text;
+alter table public.categories add column if not exists last_post_author text;
+alter table public.categories add column if not exists last_post_at timestamptz;
+alter table public.categories add column if not exists last_thread_url text;
+create unique index if not exists categories_xenforo_node_id_uidx
+  on public.categories(xenforo_node_id) where xenforo_node_id is not null;
+
+-- Thread prefixes used by the XenForo-style quick thread form.
+alter table public.threads add column if not exists prefix text;
