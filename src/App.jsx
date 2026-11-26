@@ -661,7 +661,6 @@ function App() {
                     
                     const countPosts = category.display_post_count ?? categoryThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
                     const threadCount = category.display_thread_count ?? categoryThreads.length;
-                    const childCategories = categories.filter((child) => child.parent_id === category.id).sort((a, b) => a.sort_order - b.sort_order);
                     const last = categoryThreads[0];
                     const lastTitle = category.last_thread_title || last?.title;
                     const lastAuthor = category.last_post_author || last?.author?.username;
@@ -672,7 +671,6 @@ function App() {
                           <button className="category-title" onClick={() => openCategory(category)}>{category.name}</button>
                           <p>{category.description}</p>
                           <div className="category-meta"><span><MessageSquare size={13} /> {threadCount} тем</span><span><MessagesSquare size={13} /> {countPosts} сообщений</span></div>
-                          {childCategories.length > 0 && <div className="subcategory-list">{childCategories.sort((a, b) => a.sort_order - b.sort_order).map((child) => <button type="button" key={child.id} className="subcategory-link" onClick={(event) => { event.stopPropagation(); openCategory(child); }}>{child.node_type === 'link' ? '↗' : '▸'} {child.name}</button>)}</div>}
                         </div>
                         <div className="category-last"><span className="last-label">Последнее обсуждение</span><strong>{category.last_thread_url ? <a href={category.last_thread_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{lastTitle}</a> : (lastTitle || 'Пока нет сообщений')}</strong><small>{lastAuthor || 'Будьте первым!'}{category.last_post_at ? ' · ' + dateLabel(category.last_post_at) : ''}</small></div>
                         <ChevronRight className="category-chevron" size={18} />
@@ -689,14 +687,12 @@ function App() {
                 const childPosts = child.display_post_count ?? childThreads.reduce((sum, thread) => sum + (thread.posts?.[0]?.count || 0), 0);
                 const childCount = child.display_thread_count ?? childThreads.length;
                 const lastChildThread = childThreads[0];
-                const grandchildren = categories.filter((item) => item.parent_id === child.id).sort((a, b) => a.sort_order - b.sort_order);
                 return <article className="category-card xenforo-node-card" key={child.id} onClick={() => openCategory(child)}>
                   <div className="category-icon">{child.node_type === 'link' ? '🔗' : '📁'}</div>
                   <div className="category-main">
                     <button className="category-title" onClick={() => openCategory(child)}>{child.name}</button>
                     {child.description && <p>{child.description}</p>}
                     {child.node_type !== 'link' && <div className="category-meta"><span><MessageSquare size={13} /> {childCount} тем</span><span><MessagesSquare size={13} /> {childPosts} сообщений</span></div>}
-                    {grandchildren.length > 0 && <div className="subcategory-list">{grandchildren.map((grandchild) => <button type="button" key={grandchild.id} className="subcategory-link" onClick={(event) => { event.stopPropagation(); openCategory(grandchild); }}>▸ {grandchild.name}</button>)}</div>}
                   </div>
                   <div className="category-last"><span className="last-label">{child.node_type === 'link' ? 'Внешняя ссылка' : 'Последнее обсуждение'}</span><strong>{child.last_thread_title || lastChildThread?.title || (child.node_type === 'link' ? 'Открыть ресурс' : 'Пока нет сообщений')}</strong><small>{child.last_post_author || lastChildThread?.author?.username || (child.node_type === 'link' ? child.link_url : 'Будьте первым!')}</small></div>
                   <ChevronRight className="category-chevron" size={18} />
